@@ -1,0 +1,20 @@
+:8080 {
+	@whatsappWebhook {
+		host {$WHATSAPP_TUNNEL_HOST}
+		path /webhook/{$WHATSAPP_WEBHOOK_ID}/webhook /webhook-test/{$WHATSAPP_WEBHOOK_ID}/webhook
+		method GET POST
+	}
+
+	handle @whatsappWebhook {
+		reverse_proxy n8n:5678
+	}
+
+	@localEditor host localhost 127.0.0.1
+	handle @localEditor {
+		reverse_proxy n8n:5678
+	}
+
+	handle {
+		respond "Not Found" 404
+	}
+}

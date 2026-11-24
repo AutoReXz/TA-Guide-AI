@@ -1,0 +1,223 @@
+{
+  "name": "Chatbot Panduan Tugas Akhir via WhatsApp",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "messages"
+        ],
+        "options": {
+          "messageStatusUpdates": []
+        }
+      },
+      "id": "8c29ab88-28f8-44e1-b573-b87d3450afc2",
+      "name": "WhatsApp Trigger",
+      "type": "n8n-nodes-base.whatsAppTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        320
+      ],
+      "webhookId": "wa-panduan-ta"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const messages = $input.all().flatMap((item, itemIndex) =>\n  (Array.isArray(item.json.messages) ? item.json.messages : []).map((message) => ({ message, itemIndex }))\n);\nreturn messages\n  .filter(({ message }) => typeof message.from === 'string' && message.from.length > 0)\n  .map(({ message, itemIndex }) => {\n    const question = message.type === 'text' && typeof message.text?.body === 'string'\n      ? message.text.body.trim()\n      : '';\n    return {\n      json: {\n        recipient: message.from,\n        question,\n        isText: question.length > 0,\n      },\n      pairedItem: { item: itemIndex },\n    };\n  });"
+      },
+      "id": "010cb63c-3a7e-44ad-8841-a3288b4ef10b",
+      "name": "Normalisasi Pesan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d5583321-08ca-48a5-b44f-7818b0f311a5",
+              "leftValue": "={{ $json.isText }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b9c82108-8e22-4ec1-9c4a-9b6fe3a2f60d",
+      "name": "Pesan Berupa Teks?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        680,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/ask",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { question: $json.question } }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "d70c5b07-d407-4471-a744-88a35e18ff02",
+      "name": "Tanya Backend RAG",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        920,
+        220
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const responses = $input.all();\nconst messages = $('Normalisasi Pesan').all();\nreturn responses.map((item, index) => {\n  const response = item.json;\n  const recipient = messages[index]?.json.recipient;\n  if (typeof response.answer !== 'string' || response.answer.trim().length === 0) {\n    return { json: { recipient, reply: 'Maaf, layanan panduan sedang mengalami kendala. Silakan coba kembali beberapa saat lagi.' } };\n  }\n  const references = Array.isArray(response.sources)\n    ? [...new Map(response.sources\n        .filter((source) => Number.isInteger(source.page))\n        .map((source) => [`${source.file || 'Panduan TA'}:${source.page}`, source])).values()]\n    : [];\n  const referenceText = references.length\n    ? `\\n\\nReferensi PDF:\\n${references.map((source) => `• ${source.file || 'Panduan TA'} — hal. ${source.page}`).join('\\n')}`\n    : '';\n  const reply = `${response.answer.trim()}${referenceText}`;\n  return { json: { recipient, reply: reply.length > 4096 ? `${reply.slice(0, 4070)}…` : reply } };\n});"
+      },
+      "id": "2812c43f-8202-43ae-8caa-e88d9f788124",
+      "name": "Format Jawaban dan Referensi",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1150,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return $input.all().map((item, index) => ({\n  json: {\n    recipient: item.json.recipient,\n    reply: 'Maaf, saat ini saya hanya dapat memproses pesan teks. Silakan kirim pertanyaan dalam bentuk teks.',\n  },\n  pairedItem: { item: index },\n}));"
+      },
+      "id": "cda16ba1-5d4b-46a5-9d26-af4ea6ae6caf",
+      "name": "Balas Pesan Non-Teks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        920,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "phoneNumberId": "",
+        "recipientPhoneNumber": "={{ $json.recipient }}",
+        "messageType": "text",
+        "textBody": "={{ $json.reply }}",
+        "additionalFields": {}
+      },
+      "id": "882a84fc-9e7d-41ed-916c-022aa167a441",
+      "name": "Kirim Balasan WhatsApp",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        1400,
+        320
+      ]
+    }
+  ],
+  "connections": {
+    "WhatsApp Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalisasi Pesan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalisasi Pesan": {
+      "main": [
+        [
+          {
+            "node": "Pesan Berupa Teks?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pesan Berupa Teks?": {
+      "main": [
+        [
+          {
+            "node": "Tanya Backend RAG",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Balas Pesan Non-Teks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tanya Backend RAG": {
+      "main": [
+        [
+          {
+            "node": "Format Jawaban dan Referensi",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Jawaban dan Referensi": {
+      "main": [
+        [
+          {
+            "node": "Kirim Balasan WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Balas Pesan Non-Teks": {
+      "main": [
+        [
+          {
+            "node": "Kirim Balasan WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "41caea44-1eb2-4c12-a5b1-d5010d500317",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
