@@ -2,6 +2,22 @@
 
 Backend FastAPI menjalankan RAG secara lokal: PDF diekstrak sebagai Markdown dengan struktur heading, tabel, dan persamaan dipertahankan, lalu dikelompokkan lintas halaman berdasarkan heading dengan overlap. Embeddings multibahasa dibuat secara lokal, dan ChromaDB menyimpan indeks. Retrieval menggabungkan semantic search dengan BM25 lokal. Hanya pembuatan jawaban yang mengirim pertanyaan dan potongan konteks terpilih ke Gemini.
 
+## Dokumentasi visual
+
+### Contoh percakapan WhatsApp
+
+![Contoh percakapan dengan chatbot Panduan TA](dokumentasi/whatsapp-demo.jpeg)
+
+### Workflow n8n
+
+![Workflow n8n chatbot Panduan TA](dokumentasi/n8n-workflow.png)
+
+Gambar di atas ditampilkan langsung di beranda GitHub melalui README. Untuk menambahkan gambar dokumentasi lain, simpan file gambar di folder `dokumentasi/`, lalu tambahkan Markdown berikut ke README:
+
+```markdown
+![Deskripsi gambar](dokumentasi/nama-gambar.png)
+```
+
 ## Menyiapkan backend (PowerShell)
 
 ```powershell
@@ -14,7 +30,7 @@ Copy-Item .env.example .env
 
 Isi `GEMINI_API_KEY` di `.env` dengan kunci dari Google AI Studio. Jangan bagikan atau commit file `.env`.
 
-Letakkan satu PDF panduan di folder proyek. Untuk membuat atau memperbarui indeks:
+Letakkan tepat satu file PDF panduan TA di folder `knowledge_base/`. Folder tersebut disediakan di repositori, tetapi PDF tidak disertakan dan diabaikan oleh Git. Nama file bebas; ekstensi PDF tidak peka huruf besar/kecil. Jangan letakkan lebih dari satu PDF di folder itu. Untuk membuat atau memperbarui indeks:
 
 ```powershell
 python ingest.py

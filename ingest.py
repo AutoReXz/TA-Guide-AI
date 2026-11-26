@@ -12,6 +12,7 @@ from langchain_core.documents import Document
 from app.config import CHROMA_DIR, COLLECTION_NAME, ROOT_DIR
 from app.rag import get_embeddings
 
+PDF_DIR = ROOT_DIR / "knowledge_base"
 CHUNK_SIZE = 1600
 CHUNK_OVERLAP = 180
 SECTION_HEADING = re.compile(r"^\d+(?:\.\d+){1,3}\.?\s+\S")
@@ -30,15 +31,21 @@ CONTENTS_ENTRY = re.compile(
 
 
 def find_pdf() -> Path:
-    pdfs = sorted(ROOT_DIR.glob("*.pdf"))
+    pdfs: list[Path] = []
+    if PDF_DIR.is_dir():
+        pdfs = sorted(
+            path
+            for path in PDF_DIR.iterdir()
+            if path.is_file() and path.suffix.lower() == ".pdf"
+        )
     if not pdfs:
         raise FileNotFoundError(
-            f"Tidak ada file PDF di folder proyek: {ROOT_DIR}"
+            f"Tidak ada file PDF di folder panduan: {PDF_DIR}"
         )
     if len(pdfs) > 1:
         names = ", ".join(pdf.name for pdf in pdfs)
         raise RuntimeError(
-            f"Ditemukan lebih dari satu PDF di folder proyek ({names}). "
+            f"Ditemukan lebih dari satu PDF di folder panduan ({names}). "
             "Sisakan satu panduan PDF agar sumber indeks tidak ambigu."
         )
     return pdfs[0]

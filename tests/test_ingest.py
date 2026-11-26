@@ -132,12 +132,25 @@ class IngestTests(unittest.TestCase):
         self.assertEqual(chunks[0].metadata["page"], 3)
         self.assertNotIn("DAFTAR ISI", chunks[0].page_content)
 
-    def test_find_pdf_rejects_ambiguous_root(self) -> None:
+    def test_find_pdf_uses_knowledge_base_folder(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "panduan-a.pdf").touch()
-            (root / "panduan-b.pdf").touch()
-            with patch.object(ingest, "ROOT_DIR", root):
+            knowledge_base = root / "knowledge_base"
+            knowledge_base.mkdir()
+            (root / "panduan-root.pdf").touch()
+            expected = knowledge_base / "panduan.PDF"
+            expected.touch()
+
+            with patch.object(ingest, "PDF_DIR", knowledge_base):
+                self.assertEqual(ingest.find_pdf(), expected)
+
+    def test_find_pdf_rejects_ambiguous_knowledge_base(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            knowledge_base = Path(directory) / "knowledge_base"
+            knowledge_base.mkdir()
+            (knowledge_base / "panduan-a.pdf").touch()
+            (knowledge_base / "panduan-b.pdf").touch()
+            with patch.object(ingest, "PDF_DIR", knowledge_base):
                 with self.assertRaisesRegex(RuntimeError, "lebih dari satu PDF"):
                     ingest.find_pdf()
 

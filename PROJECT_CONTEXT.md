@@ -63,7 +63,7 @@ Dependency ranges are declared in `requirements.txt`; the versions above are the
 
 ```mermaid
 flowchart LR
-    PDF[Panduan_TA.pdf] --> ING[ingest.py]
+    PDF[knowledge_base/*.pdf] --> ING[ingest.py]
     ING -->|Markdown extraction, metadata, chunking| EMB[FastEmbed local embeddings]
     EMB --> CHROMA[(ChromaDB chroma_db / panduan_ta)]
 
@@ -106,7 +106,7 @@ flowchart LR
 
 **Major components:**
 
-- `ingest.py`: Finds the sole project-root PDF, extracts and chunks it, replaces the vector collection contents, and persists the index.
+- `ingest.py`: Finds the sole PDF in `knowledge_base/`, extracts and chunks it, replaces the vector collection contents, and persists the index.
 - `app/config.py`: Loads environment variables and defines the index, model, collection, and retrieval settings.
 - `app/rag.py`: Initializes local embeddings, retrieves documents, combines semantic and lexical ranking, constructs the Gemini prompt, and formats citations.
 - `app/main.py`: Exposes health and question endpoints.
@@ -142,7 +142,7 @@ Embeddings and vector storage are local. Gemini answer generation and WhatsApp d
 ├── .gitignore
 ├── docker-compose.yml        # n8n and Caddy services
 ├── ingest.py                 # PDF ingestion and index rebuild
-├── Panduan_TA.pdf            # Sole active knowledge source
+├── knowledge_base/           # Place one local PDF guide here; PDFs are gitignored
 ├── README.md                 # Setup and operational instructions
 ├── requirements.txt          # Python dependency ranges
 ├── start-whatsapp-tunnel.ps1 # Cloudflare/Caddy/n8n launcher
@@ -163,7 +163,7 @@ Important modules:
 
 The only ingestion entry point is `python ingest.py`.
 
-1. `find_pdf()` searches project-root `*.pdf` files. It rejects missing PDFs and rejects more than one PDF to prevent ambiguous indexing.
+1. `find_pdf()` searches `knowledge_base/` for PDF files. It rejects missing PDFs and rejects more than one PDF to prevent ambiguous indexing.
 2. `extract_chunks()` opens the PDF with `pymupdf.open()` and calls `pymupdf4llm.to_markdown(pdf, page_chunks=True)`.
 3. Each page chunk is treated as Markdown. The code reads `metadata.page` or `metadata.page_number`, falling back to a one-based page index.
 4. Table-of-contents and daftar isi pages are detected and skipped using title patterns and dotted/numbered entry ratios.
@@ -330,11 +330,11 @@ Status is `degraded` when either the index or Gemini key is not ready.
 {
   "answer": "Ringkasan jawaban berdasarkan panduan [hal. 201].",
   "sources": [
-    {"file": "Panduan_TA.pdf", "page": 201}
+    {"file": "panduan-ta.pdf", "page": 201}
   ],
   "chunks": [
     {
-      "file": "Panduan_TA.pdf",
+      "file": "panduan-ta.pdf",
       "page": 201,
       "content": "Teks sumber yang digunakan...",
       "relevance_score": 0.73
@@ -778,7 +778,7 @@ Supported by the repository:
 
 ## 20. Compact Context for Other LLMs
 
-TA-Guide AI is a Python-based Retrieval-Augmented Generation assistant for answering questions about an Indonesian university Tugas Akhir guide. The repository currently uses one PDF, `Panduan_TA.pdf`, as its knowledge source. `ingest.py` converts the PDF to Markdown with PyMuPDF and pymupdf4llm, removes table-of-contents pages and page markers, identifies heading hierarchy, and creates custom text chunks with a 1600-character maximum, 180-character overlap, source filename, and 1-based page metadata. The chunks are embedded locally with the multilingual `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` model through FastEmbed and stored in persistent ChromaDB collection `panduan_ta` using cosine distance. A verified local index contains 455 chunks.
+TA-Guide AI is a Python-based Retrieval-Augmented Generation assistant for answering questions about an Indonesian university Tugas Akhir guide. The repository expects one local PDF in `knowledge_base/`; PDF files are excluded from Git and must be provided by each user. `ingest.py` converts the PDF to Markdown with PyMuPDF and pymupdf4llm, removes table-of-contents pages and page markers, identifies heading hierarchy, and creates custom text chunks with a 1600-character maximum, 180-character overlap, source filename, and 1-based page metadata. The chunks are embedded locally with the multilingual `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` model through FastEmbed and stored in persistent ChromaDB collection `panduan_ta` using cosine distance. A verified local index contains 455 chunks.
 
 The RAG backend is FastAPI. It exposes `GET /health` and `POST /ask`. `/ask` accepts a Pydantic-validated question and calls `answer_question()` in `app/rag.py`. Retrieval combines semantic similarity from ChromaDB with custom BM25 lexical search, reciprocal-rank fusion, a minimum semantic relevance threshold of 0.45, and a section-title boost. The default top-K is five. Selected passages are inserted into a hard-coded Indonesian prompt that requires grounding in the guide, no invented general knowledge, a not-found fallback, and `[hal. N]` citations. Gemini is used only for answer generation, with a default model of `gemini-3.5-flash-lite` and temperature 0.1. The API returns answer text, unique source/page references, source chunks, relevance scores, and a combined text field.
 
