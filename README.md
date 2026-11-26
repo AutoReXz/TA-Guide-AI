@@ -1,125 +1,71 @@
-# Chatbot Panduan Tugas Akhir
+# TA Guide AI
 
-Backend FastAPI menjalankan RAG secara lokal: PDF diekstrak sebagai Markdown dengan struktur heading, tabel, dan persamaan dipertahankan, lalu dikelompokkan lintas halaman berdasarkan heading dengan overlap. Embeddings multibahasa dibuat secara lokal, dan ChromaDB menyimpan indeks. Retrieval menggabungkan semantic search dengan BM25 lokal. Hanya pembuatan jawaban yang mengirim pertanyaan dan potongan konteks terpilih ke Gemini.
+TA Guide AI answers questions in Indonesian using a thesis or final-project guide that you provide as a PDF. Students can use it to look up submission requirements, proposal steps, or formatting rules and check the cited pages in their own guide.
 
-## Dokumentasi visual
+The local Streamlit app displays answers, PDF page references, and the passages used. A FastAPI backend also exposes the same workflow through an API.
 
-### Contoh percakapan WhatsApp
+## How It Works
 
-![Contoh percakapan dengan chatbot Panduan TA](dokumentasi/whatsapp-demo.jpeg)
+1. **Index your guide.** The ingestion script extracts readable text from the PDF, groups it by section, and stores locally generated embeddings in ChromaDB.
+2. **Retrieve relevant passages.** The backend combines semantic search with BM25 keyword search.
+3. **Generate an answer.** Gemini receives the question and selected passages, including their source references. The PDF, embeddings, and search index stay on your machine. The backend returns a message when it finds no relevant material.
 
-### Workflow n8n
+## Quick Start
 
-![Workflow n8n chatbot Panduan TA](dokumentasi/n8n-workflow.png)
+You need Python 3.11 or 3.12, a [Gemini API key](https://aistudio.google.com/apikey), and one PDF with selectable text. Use an appropriate guide that you have permission to process with Gemini.
 
-Gambar di atas ditampilkan langsung di beranda GitHub melalui README. Untuk menambahkan gambar dokumentasi lain, simpan file gambar di folder `dokumentasi/`, lalu tambahkan Markdown berikut ke README:
+### 1. Set up the project
 
-```markdown
-![Deskripsi gambar](dokumentasi/nama-gambar.png)
+```bash
+git clone https://github.com/AutoReXz/TA-Guide-AI.git
+cd TA-Guide-AI
+python -m venv .venv
 ```
 
-## Menyiapkan backend (PowerShell)
+Activate the virtual environment with `source .venv/bin/activate` on macOS or Linux, or `.\.venv\Scripts\Activate.ps1` in Windows PowerShell. Then install the dependencies:
 
-```powershell
-py -3.11 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-Copy-Item .env.example .env
+```bash
+python -m pip install -r requirements.txt
 ```
 
-Isi `GEMINI_API_KEY` di `.env` dengan kunci dari Google AI Studio. Jangan bagikan atau commit file `.env`.
+Copy `.env.example` to `.env` using `cp .env.example .env` on macOS or Linux, or `Copy-Item .env.example .env` in PowerShell. Set `GEMINI_API_KEY` in `.env`.
 
-Letakkan tepat satu file PDF panduan TA di folder `knowledge_base/`. Folder tersebut disediakan di repositori, tetapi PDF tidak disertakan dan diabaikan oleh Git. Nama file bebas; ekstensi PDF tidak peka huruf besar/kecil. Jangan letakkan lebih dari satu PDF di folder itu. Untuk membuat atau memperbarui indeks:
+### 2. Add and index your PDF
 
-```powershell
+Place **exactly one PDF** directly in [`knowledge_base/`](knowledge_base/). Choose any filename ending in `.pdf`. The repository provides an empty folder for your guide, and Git ignores PDFs placed there.
+
+```bash
 python ingest.py
 ```
 
-Unduhan model embedding lokal hanya diperlukan saat indeks pertama kali dibuat. Lalu jalankan API:
+The first run downloads the local embedding model. To switch guides, stop the backend, replace the PDF, run the indexing command again, and restart the backend. Indexing replaces the previous document entries.
 
-```powershell
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+### 3. Start the API and chat
+
+Run the backend from the repository root:
+
+```bash
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Cek `http://localhost:8000/health` dan dokumentasi API di `http://localhost:8000/docs`. Endpoint `POST /ask` menerima `{"question":"..."}` dan mengembalikan jawaban, sumber file/halaman, serta cuplikan chunks yang dipakai untuk menjawab.
+Open [the interactive API reference](http://localhost:8000/docs) to try `POST /ask` with `{"question":"Apa syarat seminar proposal?"}`. The [health endpoint](http://localhost:8000/health) reports whether the index and Gemini key are configured.
 
-## Menjalankan UI Streamlit
+In a second terminal, activate the same virtual environment and start the chat:
 
-Pastikan backend FastAPI sudah berjalan di port `8000`. Di terminal lain, aktifkan virtual environment lalu jalankan:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-streamlit run app/streamlit_app.py
+```bash
+python -m streamlit run app/streamlit_app.py
 ```
 
-Buka `http://localhost:8501`. URL backend dapat diubah dari sidebar UI jika API berjalan di alamat lain. Pilih jawaban "Benar" atau "Salah" untuk menyimpan evaluasi secara lokal ke `feedback.jsonl` (file ini tidak dilacak Git). Nilai `API_BASE_URL` dapat diatur sebagai environment variable untuk mengubah alamat backend default.
+Open [the local chat](http://localhost:8501). Choose an example question or ask about the guide you indexed. Feedback you submit is saved locally in `feedback.jsonl`.
 
-Jalankan tes unit dengan `python -m unittest discover -s tests`.
+## Optional WhatsApp Integration
 
-## Menjalankan n8n
+The repository includes an [n8n workflow](n8n/workflows/chatbot-panduan-ta.json) that forwards WhatsApp text messages to FastAPI. The local chat setup works independently. To use WhatsApp, configure your own Meta credentials and a reachable HTTPS webhook. See the [integration notes](PROJECT_CONTEXT.md#10-whatsapp-and-n8n-integration) and [workflow screenshot](dokumentasi/n8n-workflow.png).
 
-Docker Desktop dan WSL2 harus sudah berjalan. Dari folder proyek:
+## Tests
 
-```powershell
-docker compose up -d
+```bash
+python -m unittest discover -s tests
 ```
 
-Buka `http://localhost:5678` dan impor `n8n/workflows/chatbot-panduan-ta.json`. Workflow menggunakan `http://host.docker.internal:8000/ask`, yang menghubungkan container n8n ke FastAPI pada Windows. Pastikan API berjalan dengan `uvicorn app.main:app --host 0.0.0.0 --port 8000`.
-
-### Uji dengan payload mock
-
-Workflow tidak aktif secara default dan tidak menyertakan credential. Untuk memeriksa alur tanpa memanggil WhatsApp:
-
-1. Pada node **WhatsApp Trigger**, gunakan data pin/mock dengan bentuk event hasil trigger berikut:
-
-   ```json
-   {
-     "messages": [
-       {
-         "from": "6281234567890",
-         "type": "text",
-         "text": {
-           "body": "Apa syarat seminar proposal?"
-         }
-       }
-     ]
-   }
-   ```
-2. Jalankan node normalisasi dan cek bahwa pengirim dan pertanyaan terbaca. Jalankan node **Tanya Backend RAG** untuk uji integrasi lokal; node ini memerlukan FastAPI aktif dan dapat menggunakan Gemini yang dikonfigurasi proyek.
-3. Sebelum menjalankan workflow end-to-end, pasang credential n8n dan pilih **Phone Number ID** pada node kirim. Jangan menyalakan workflow untuk mengirim pesan jika belum siap memakai nomor uji Meta.
-
-Pesan gambar, audio, lokasi, dan tipe non-teks lainnya dibalas dengan permintaan agar pertanyaan dikirim sebagai teks. Error backend/Gemini dikembalikan sebagai pesan gangguan singkat dan tidak membocorkan detail internal.
-
-### Webhook HTTPS terbatas untuk WhatsApp
-
-Webhook WhatsApp perlu URL HTTPS yang dapat diakses Meta. `n8n/Caddyfile` hanya meneruskan `GET`/`POST` untuk path trigger workflow pada hostname tunnel yang sedang aktif dan menolak path lain. Port editor n8n tetap terikat ke `127.0.0.1:5678`; tunnel diarahkan ke proxy, bukan langsung ke editor atau FastAPI.
-
-Quick Tunnel tidak memerlukan token atau domain berbayar, tetapi URL `trycloudflare.com` berubah setiap kali tunnel dibuat ulang. Gunakan launcher PowerShell agar URL baru diterapkan otomatis ke Caddy dan n8n serta callback workflow didaftarkan ulang ke Meta:
-
-```powershell
-.\start-whatsapp-tunnel.ps1
-```
-
-Docker Desktop harus berjalan dan `cloudflared.exe` harus terpasang (launcher memakai executable Windows yang sudah ada, bukan menarik image tunnel baru). Launcher mengambil URL Quick Tunnel, memasang hostname dan ID trigger pada proxy, lalu mem-publish workflow agar callback Meta diperbarui.
-
-Biarkan jendela PowerShell launcher tetap terbuka selama webhook digunakan; `Ctrl+C` menghentikan tunnel. Jalankan ulang setelah Docker/Windows dimulai ulang. Jika ID workflow atau ID webhook trigger berubah, berikan ID yang baru:
-
-```powershell
-.\start-whatsapp-tunnel.ps1 -WorkflowId ID_WORKFLOW -WebhookId ID_TRIGGER
-```
-
-Launcher tidak mengubah `.env` atau credential. Root URL publik tetap harus memberi `404`; hanya path webhook WhatsApp yang diteruskan. Editor tetap tersedia secara lokal di `http://localhost:5678`. Quick Tunnel cocok untuk development, bukan endpoint permanen.
-
-### Setup Meta dan credential n8n
-
-Langkah ini memerlukan akun/aset Meta Anda dan belum dilakukan:
-
-1. Di Meta for Developers buat aplikasi business, tambahkan produk WhatsApp, lalu buka **WhatsApp > API Setup**. Gunakan nomor uji yang disediakan Meta dan daftarkan nomor penerima uji sesuai petunjuk di dashboard.
-2. Di n8n, buat credential **WhatsApp Trigger OAuth2 API** dari **App ID** dan **App Secret** aplikasi Meta, lalu pilih credential itu di node trigger.
-3. Buat credential **WhatsApp API** untuk node kirim menggunakan access token dan **WhatsApp Business Account ID** dari dashboard Meta. Pilih Phone Number ID pengirim pada node **Kirim Balasan WhatsApp**.
-4. Setelah URL HTTPS tersedia, aktifkan/publish workflow. WhatsApp Trigger n8n mendaftarkan callback Meta saat workflow aktif; Meta hanya mengizinkan satu webhook aktif per aplikasi. Kirim pesan uji teks dari nomor penerima terdaftar.
-
-Token hanya disimpan sebagai credential terenkripsi di n8n; App Secret tidak diperlukan di workflow. Jangan mengubah mode/izin akun Meta atau mengirim pesan berbayar tanpa meninjau dan mengonfirmasi langkah tersebut. End-to-end test belum dapat dijalankan tanpa akun dan credential Meta.
-
-Jika Docker belum tersedia atau WSL gagal berjalan, aktifkan fitur Windows Subsystem for Linux dan Virtual Machine Platform, pastikan virtualisasi aktif di BIOS/UEFI, lalu jalankan `wsl --install --no-distribution` dari PowerShell Administrator dan restart Windows. Instal/jalankan Docker Desktop setelah itu. Langkah ini memerlukan tindakan manual/izin administrator. Backend dan endpoint `/docs` tetap dapat dijalankan tanpa Docker.
+The tests cover PDF discovery and extraction, hybrid retrieval, source references, and API responses. See the [project notes](PROJECT_CONTEXT.md) for architecture and implementation details.
